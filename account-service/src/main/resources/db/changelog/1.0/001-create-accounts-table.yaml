@@ -1,0 +1,83 @@
+databaseChangeLog:
+  - changeSet:
+      id: 001-create-accounts-table
+      author: dev
+      changes:
+
+        - createTable:
+            tableName: accounts
+            remarks: Customer bank accounts
+            columns:
+
+              - column:
+                  name: id
+                  type: BIGSERIAL
+                  remarks: Primary key
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+                    primaryKeyName: pk_accounts
+
+              - column:
+                  name: account_number
+                  type: VARCHAR(34)
+                  remarks: Unique account number
+                  constraints:
+                    nullable: false
+                    unique: true
+                    uniqueConstraintName: uq_accounts_account_number
+
+              - column:
+                  name: iban
+                  type: VARCHAR(34)
+                  remarks: International bank account number
+                  constraints:
+                    nullable: false
+                    unique: true
+                    uniqueConstraintName: uq_accounts_iban
+
+              - column:
+                  name: customer_id
+                  type: BIGINT
+                  remarks: Reference to customer-service
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: currency
+                  type: VARCHAR(3)
+                  remarks: ISO currency code (AZN, USD, EUR)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: status
+                  type: VARCHAR(20)
+                  remarks: Account status (ACTIVE, BLOCKED, CLOSED)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  remarks: Creation timestamp
+                  defaultValueComputed: CURRENT_TIMESTAMP
+
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+                  remarks: Last update timestamp
+
+        - createIndex:
+            tableName: accounts
+            indexName: idx_accounts_customer_id
+            columns:
+              - column:
+                  name: customer_id
+
+        - createIndex:
+            tableName: accounts
+            indexName: idx_accounts_status
+            columns:
+              - column:
+                  name: status

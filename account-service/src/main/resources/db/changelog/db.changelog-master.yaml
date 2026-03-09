@@ -1,0 +1,7 @@
+databaseChangeLog:
+  - include:
+      file: db/changelog/1.0/001-create-accounts-table.yaml
+  - include:
+      file: db/changelog/1.0/002-create-account-balances-table.yaml
+  - include:
+      file: db/changelog/1.0/003-create-account-holds-table.yaml

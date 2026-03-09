@@ -1,0 +1,78 @@
+databaseChangeLog:
+  - changeSet:
+      id: 003-create-account-holds-table
+      author: dev
+      changes:
+
+        - createTable:
+            tableName: account_holds
+            remarks: Temporarily blocked amounts for pending transactions
+            columns:
+
+              - column:
+                  name: id
+                  type: BIGSERIAL
+                  remarks: Primary key
+                  constraints:
+                    primaryKey: true
+                    primaryKeyName: pk_account_holds
+                    nullable: false
+
+              - column:
+                  name: account_id
+                  type: BIGINT
+                  remarks: Account reference
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: amount
+                  type: DECIMAL(19,2)
+                  remarks: Blocked amount
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: reason
+                  type: VARCHAR(255)
+                  remarks: Reason for hold
+
+              - column:
+                  name: status
+                  type: VARCHAR(20)
+                  remarks: Hold status (ACTIVE, RELEASED)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  remarks: Hold creation time
+                  defaultValueComputed: CURRENT_TIMESTAMP
+
+              - column:
+                  name: expires_at
+                  type: TIMESTAMP
+                  remarks: Hold expiration time
+
+        - addForeignKeyConstraint:
+            baseTableName: account_holds
+            baseColumnNames: account_id
+            constraintName: fk_account_holds_account
+            referencedTableName: accounts
+            referencedColumnNames: id
+            onDelete: CASCADE
+
+        - createIndex:
+            tableName: account_holds
+            indexName: idx_account_holds_account_id
+            columns:
+              - column:
+                  name: account_id
+
+        - createIndex:
+            tableName: account_holds
+            indexName: idx_account_holds_status
+            columns:
+              - column:
+                  name: status
