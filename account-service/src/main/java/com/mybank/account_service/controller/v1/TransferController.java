@@ -3,6 +3,7 @@ package com.mybank.account_service.controller.v1;
 import com.mybank.account_service.dto.request.TransferRequest;
 import com.mybank.account_service.dto.response.TransferResponse;
 import com.mybank.account_service.service.TransferService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -11,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/transfers")
 @RequiredArgsConstructor
+@Tag(name = "Transfer", description = "Hesablar arası köçürmə əməliyyatları")
 public class TransferController {
 
     private final TransferService transferService;
