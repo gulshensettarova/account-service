@@ -1,0 +1,292 @@
+1. N+1 Problemi
+Problem nədir?
+Bizdə AccountEntity var — içində balance var (LAZY).
+// Müştərinin 3 hesabı var
+List<AccountEntity> accounts =
+    accountRepository.findByCustomerId(1L);
+
+// DB-yə gedən SQL:
+// SELECT * FROM accounts WHERE customer_id = 1
+// → 3 hesab gəldi
+
+İndi hər hesabın balansına baxırıq:
+for (AccountEntity account : accounts) {
+    BigDecimal balance =
+        account.getBalance().getAvailableBalance();
+    System.out.println(balance);
+}
+```
+
+Arxada nə baş verir:
+```
+SELECT * FROM accounts WHERE customer_id = 1
+→ 3 hesab gəldi (1 sorğu)
+
+account[0].getBalance() →
+SELECT * FROM account_balances WHERE account_id = 1
+(2-ci sorğu)
+
+account[1].getBalance() →
+SELECT * FROM account_balances WHERE account_id = 2
+(3-cü sorğu)
+
+account[2].getBalance() →
+SELECT * FROM account_balances WHERE account_id = 3
+(4-cü sorğu)
+
+Cəmi: 1 + 3 = 4 sorğu
+3 hesab üçün 4 sorğu getdi!
+
+
+Həll nədir?
+// JOIN FETCH — "hər şeyi bir dəfəyə gətir"
+@Query("""
+    SELECT a FROM AccountEntity a
+    JOIN FETCH a.balance
+    WHERE a.customerId = :customerId
+""")
+List<AccountEntity> findByCustomerIdWithBalance(
+    @Param("customerId") Long customerId
+);
+SELECT a.*, b.*
+FROM accounts a
+JOIN account_balances b ON b.account_id = a.id
+WHERE a.customer_id = 1
+
+-- 1 sorğu — hər şey gəldi! ✓
+```
+```
+Əvvəl: 1 + N sorğu (101 sorğu)
+İndi:  1 sorğu       ✓
+```
+
+---
+
+Həll 2: @EntityGraph
+// Repository-də
+@EntityGraph(attributePaths = {"balance"})
+List<AccountEntity> findByCustomerId(Long customerId);
+
+// Və ya entity-də təyin et:
+@NamedEntityGraph(
+    name = "Account.withBalance",
+    attributeNodes = @NamedAttributeNode("balance")
+)
+@Entity
+public class AccountEntity { ... }
+
+// Repository-də istifadə:
+@EntityGraph(value = "Account.withBalance")
+List<AccountEntity> findByCustomerId(Long customerId);
+
+-- Arxada JOIN FETCH kimi işləyir:
+SELECT a.*, b.*
+FROM accounts a
+LEFT JOIN account_balances b ON b.account_id = a.id
+WHERE a.customer_id = 1
+```
+```
+✅ 1 sorğu
+✅ Entity-də mərkəzləşdirilmiş — bir yerdə təyin
+✅ JOIN FETCH-dən fərqi: LEFT JOIN istifadə edir
+❌ Pagination ilə problem ola bilər
+❌ JOIN FETCH-dən daha mürəkkəb sintaksis
+
+Həll 3: @BatchSize
+@Entity
+public class AccountEntity {
+
+    @OneToOne(fetch = FetchType.LAZY)
+    @BatchSize(size = 50)  // ← 50-lik batch-lərlə yüklə
+    private AccountBalanceEntity balance;
+}
+@Entity
+public class AccountEntity {
+
+    @OneToOne(fetch = FetchType.LAZY)
+    @BatchSize(size = 50)  // ← 50-lik batch-lərlə yüklə
+    private AccountBalanceEntity balance;
+}
+
+Həll 4: DTO Projection — ən performanslı
+// Yalnız lazım olan field-lər
+@Query("""
+    SELECT new com.mybank.account_service.dto.response.BalanceResponse(
+        b.availableBalance,
+        b.blockedBalance,
+        b.updatedAt
+    )
+    FROM AccountBalanceEntity b
+    WHERE b.accountId = :accountId
+""")
+BalanceResponse findBalanceByAccountId(
+    @Param("accountId") Long accountId
+);
+-- Yalnız lazım olan sütunlar:
+SELECT b.available_balance,
+       b.blocked_balance,
+       b.updated_at
+FROM account_balances b
+WHERE b.account_id = 1
+```
+```
+✅ 1 sorğu
+✅ Ən sürətli — entity yüklənmir
+✅ Dirty checking yoxdur — overhead yoxdur
+✅ Pagination ilə işləyir
+❌ Entity lazım olsa işləmir
+❌ Hər sorğu üçün ayrı DTO lazımdır
+
+
+⚠️Sual : "N+1 problemini həll etmək üçün JOIN FETCH istifadə etdin. Başqa yollar var mıydı?"
+✅Cavab : "JOIN FETCH — ən sadəsi, amma iki məhdudiyyəti var:
+          iki collection-da Cartesian Product, pagination-da işləmir.
+          Pagination lazım olsa @BatchSize istifadə edərəm — N+1 əvəzinə N/batchSize+1 sorğu gedir.
+          Əgər entity-nin özü lazım deyil, yalnız bəzi field-lər lazımdırsa — DTO Projection ən performanslıdır, dirty checking yoxdur, yalnız lazım olan sütunlar gəlir.
+          Əksər hallarda DTO Projection üstün tuturam — istifadəçiyə entity-ni birbaşa vermək əvəzinə lazım olan field-ləri seçib DTO-ya map edirəm."
+
+
+
+ 2. Pagination problemi
+
+// 100 hesab var — səhifə-səhifə göstər
+// Hər səhifədə 10 hesab + balans
+@Query("""
+    SELECT a FROM AccountEntity a
+    JOIN FETCH a.balance
+    WHERE a.customerId = :customerId
+""")
+Page<AccountEntity> findByCustomerIdWithBalance(
+    Long customerId,
+    Pageable pageable  // page=0, size=10
+);
+
+Nə baş verir?
+-- Yalnız 10 sətir gəlsin
+SELECT a.*, b.*
+FROM accounts a
+JOIN account_balances b ON b.account_id = a.id
+WHERE a.customer_id = 1
+LIMIT 10 OFFSET 0
+
+-- LIMIT yoxdur! Hamısını gətirir!
+SELECT a.*, b.*
+FROM accounts a
+JOIN account_balances b ON b.account_id = a.id
+WHERE a.customer_id = 1
+
+-- Sonra yaddaşda 10-a endirir!
+```
+
+Hibernate log-da xəbərdarlıq:
+```
+HHH90003004: firstResult/maxResults specified with
+collection fetch; applying in memory!
+```
+
+**Niyə belə olur?**
+```
+JOIN FETCH — bütün cədvəli birləşdirir
+Collection varsa — sətir sayı dəyişir (Cartesian Product)
+LIMIT/OFFSET — sətir sayına görə işləyir
+
+Hibernate bilmir:
+"LIMIT 10" — 10 account deməkdir?
+             yoxsa 10 sətir deməkdir?
+
+Cartesian Product-da:
+10 account × 3 hold = 30 sətir
+LIMIT 10 → 10 sətir → yalnız 3-4 account gəlir!
+Bu yanlış nəticədir!
+
+Ona görə Hibernate:
+→ Hamısını gətirir
+→ Yaddaşda pagination edir
+→ Böyük datada — OutOfMemoryError! 🚨
+
+
+3. Cartesian Product problemi
+AccountEntity-nin 2 collection-ı var:
+→ balance  (@OneToOne)
+→ holds    (@OneToMany)
+
+// İKİ collection JOIN FETCH
+@Query("""
+    SELECT a FROM AccountEntity a
+    JOIN FETCH a.balance
+    JOIN FETCH a.holds
+    WHERE a.customerId = :customerId
+""")
+List<AccountEntity> findByCustomerIdWithAll(Long customerId);
+### DB-də nə baş verir?
+```
+AccountEntity (1 hesab):
+id=1, accountNumber="AZ123"
+
+AccountBalanceEntity (1 balans):
+account_id=1, available=1000
+
+AccountHoldEntity (3 hold):
+id=1, account_id=1, amount=100
+id=2, account_id=1, amount=200
+id=3, account_id=1, amount=300
+
+JOIN etdikdə:
+SELECT a.*, b.*, h.*
+FROM accounts a
+JOIN account_balances b ON b.account_id = a.id
+JOIN account_holds h ON h.account_id = a.id
+WHERE a.customer_id = 1
+```
+
+Nəticə:
+a.id | a.accountNumber | b.available | h.id | h.amount
+─────────────────────────────────────────────────────
+1    | AZ123           | 1000        | 1    | 100
+1    | AZ123           | 1000        | 2    | 200      ← account təkrarlandı!
+1    | AZ123           | 1000        | 3    | 300      ← account təkrarlandı!
+
+
+1 account × 1 balance × 3 hold = 3 sətir!
+Account məlumatı 3 dəfə təkrarlandı — Cartesian Product!
+10 hesab, hər birinin 5 hold-u varsa:
+10 × 5 = 50 sətir qaytarır
+Hibernate bunları merge edir — 10 account olur
+AMA 50 sətirlik data yaddaşa gəldi! 🚨
+
+Hibernate necə idarə edir?
+// Hibernate duplikatları aradan qaldırır
+// AMA bunun üçün hamısı yaddaşa gəlməlidir!
+
+// DISTINCT əlavə etsək belə — problem tam həll olmur
+@Query("""
+    SELECT DISTINCT a FROM AccountEntity a
+    JOIN FETCH a.balance
+    JOIN FETCH a.holds
+""")
+// DB-də DISTINCT işləyir — amma 50 sətir hələ də gəlir
+// Sonra Hibernate yaddaşda 10-a endirir
+// Böyük datada — OutOfMemoryError riski! 🚨
+
+✅Həll:
+// Yalnız bir collection JOIN FETCH et
+@Query("""
+    SELECT a FROM AccountEntity a
+    JOIN FETCH a.balance
+    WHERE a.customerId = :customerId
+""")
+List<AccountEntity> findWithBalance(Long customerId);
+
+// İkinci collection — ayrı sorğu ilə
+@Query("""
+    SELECT a FROM AccountEntity a
+    JOIN FETCH a.holds
+    WHERE a.customerId = :customerId
+""")
+List<AccountEntity> findWithHolds(Long customerId);
+
+// Və ya @BatchSize ilə:
+@OneToMany(mappedBy = "account")
+@BatchSize(size = 50)  // ← ikinci collection üçün
+private List<AccountHoldEntity> holds;
+
