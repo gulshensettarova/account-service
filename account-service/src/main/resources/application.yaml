@@ -1,5 +1,5 @@
 server:
-  port: 8081
+  port: 8082
   servlet:
     context-path: /
 
@@ -20,10 +20,10 @@ spring:
     show-sql: true
     properties:
       hibernate:
-        format_sql: true
+        format_sql: false
 
   liquibase:
-    enabled: false
+    enabled: true
     change-log: classpath:db/changelog/db.changelog-master.yaml
 
 springdoc:
@@ -39,6 +39,9 @@ springdoc:
 logging:
   level:
     com.mybank: DEBUG
+    org.springframework.web: DEBUG
+    org.springframework.http.converter: DEBUG
+    org.springframework.web.servlet.DispatcherServlet: DEBUG
     org.hibernate.SQL: DEBUG
     org.hibernate.type.descriptor.sql: TRACE
   pattern:

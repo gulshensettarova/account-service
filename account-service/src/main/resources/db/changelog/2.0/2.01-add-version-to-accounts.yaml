@@ -1,0 +1,16 @@
+databaseChangeLog:
+  - changeSet:
+      id: 2.01-add-version-to-accounts
+      author: Gulshan Sattarova
+      changes:
+
+        - addColumn:
+            tableName: accounts
+            columns:
+              - column:
+                  name: version
+                  type: BIGINT
+                  remarks: Optimistic locking version
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false

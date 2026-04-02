@@ -1,12 +1,17 @@
 package com.mybank.account_service.dto.request;
 
 import jakarta.validation.constraints.*;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
+
 import java.math.BigDecimal;
 
 @Getter
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class TransferRequest {
 
     @NotNull(message = "Göndərən hesab boş ola bilməz")
@@ -16,10 +21,7 @@ public class TransferRequest {
     private Long toAccountId;
 
     @NotNull(message = "Məbləğ boş ola bilməz")
-    @DecimalMin(
-            value = "0.01",
-            message = "Məbləğ 0-dan böyük olmalıdır"
-    )
+    @DecimalMin(value = "0.01", message = "Məbləğ 0-dan böyük olmalıdır")
     private BigDecimal amount;
 
     @Size(max = 255)

@@ -30,9 +30,7 @@ public interface AccountRepository
         JOIN FETCH a.balance
         WHERE a.id = :id
     """)
-    Optional<AccountEntity> findByIdWithBalance(
-            @Param("id") Long id
-    );
+    Optional<AccountEntity> findByIdWithBalance(@Param("id") Long id);
 
     // Müştərinin bütün hesabları — balance ilə
     @Query("""
@@ -41,9 +39,7 @@ public interface AccountRepository
         WHERE a.customerId = :customerId
         ORDER BY a.createdAt DESC
     """)
-    List<AccountEntity> findByCustomerIdWithBalance(
-            @Param("customerId") Long customerId
-    );
+    List<AccountEntity> findByCustomerIdWithBalance(@Param("customerId") Long customerId);
 
     // Status üzrə — balance ilə
     @Query("""

@@ -1,0 +1,19 @@
+databaseChangeLog:
+  - changeSet:
+      id: 2.02-add-version-to-account-balances
+      author: dev
+      changes:
+
+        - addColumn:
+            tableName: account_balances
+            columns:
+              - column:
+                  name: version
+                  type: BIGINT
+                  remarks: Optimistic locking version
+                  defaultValueNumeric: 0
+
+        - addNotNullConstraint:
+            tableName: account_balances
+            columnName: version
+            columnDataType: BIGINT

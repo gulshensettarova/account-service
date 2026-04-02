@@ -30,10 +30,7 @@ public class TransferServiceImpl implements TransferService {
     public TransferResponse transfer(TransferRequest request) {
 
         log.info("Köçürmə başladı: from={}, to={}, amount={}",
-                request.getFromAccountId(),
-                request.getToAccountId(),
-                request.getAmount());
-
+                request.getFromAccountId(), request.getToAccountId(), request.getAmount());
         // Eyni hesaba köçürmə
         if (request.getFromAccountId().equals(request.getToAccountId())) {
             throw new BankException("SAME_ACCOUNT_TRANSFER", "Eyni hesaba köçürmə mümkün deyil", 422);
@@ -46,41 +43,29 @@ public class TransferServiceImpl implements TransferService {
         // Pessimistic Lock — hər iki hesab
         var first = accountRepository
                 .findByIdWithLock(firstId)
-                .orElseThrow(() ->
-                        new AccountNotFoundException(firstId));
-
+                .orElseThrow(() -> new AccountNotFoundException(firstId));
+        log.info("first account: {}",first);
         var second = accountRepository
                 .findByIdWithLock(secondId)
-                .orElseThrow(() ->
-                        new AccountNotFoundException(secondId));
-
-        // Göndərən və alan
+                .orElseThrow(() -> new AccountNotFoundException(secondId));
+        log.info("second account: {}",first);
         var fromAccount = request.getFromAccountId().equals(firstId) ? first : second;
         var toAccount = request.getFromAccountId().equals(firstId) ? second : first;
-
-        // Status yoxlamaları
         validateStatus(fromAccount.getStatus(), request.getFromAccountId());
         validateStatus(toAccount.getStatus(), request.getToAccountId());
 
         int deducted = balanceRepository.updateAvailableBalance(request.getFromAccountId(), request.getAmount().negate());
+        log.info("deducted:{}",deducted);
         if (deducted == 0) {
-            throw new InsufficientFundsException(
-                    fromAccount.getBalance().getAvailableBalance(),
-                    request.getAmount()
-            );
+            throw new InsufficientFundsException(fromAccount.getBalance().getAvailableBalance(), request.getAmount());
         }
         balanceRepository.updateAvailableBalance(request.getToAccountId(), request.getAmount());
         auditService.log(request.getFromAccountId(), "TRANSFER_COMPLETED",
-                String.format(
-                        "Köçürmə: %s → %s, Məbləğ: %s %s",
-                        request.getFromAccountId(),
-                        request.getToAccountId(),
-                        request.getAmount(),
+                String.format("Köçürmə: %s → %s, Məbləğ: %s %s",
+                        request.getFromAccountId(), request.getToAccountId(), request.getAmount(),
                         fromAccount.getCurrency()));
         log.info("Köçürmə tamamlandı: from={}, to={}, amount={}",
-                request.getFromAccountId(),
-                request.getToAccountId(),
-                request.getAmount());
+                request.getFromAccountId(), request.getToAccountId(), request.getAmount());
         return accountMapper.toTransferResponse(request);
     }
 

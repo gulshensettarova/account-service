@@ -5,3 +5,9 @@ databaseChangeLog:
       file: db/changelog/1.0/002-create-account-balances-table.yaml
   - include:
       file: db/changelog/1.0/003-create-account-holds-table.yaml
+  - include:
+      file: db/changelog/2.0/2.01-add-version-to-accounts.yaml
+  - include:
+      file: db/changelog/2.0/2.02-add-version-to-account-balances.yaml
+
+

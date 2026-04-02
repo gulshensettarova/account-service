@@ -2,6 +2,7 @@ package com.mybank.account_service.exception;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import jakarta.persistence.OptimisticLockException;
@@ -56,6 +57,17 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.builder()
                         .errorCode("INTERNAL_ERROR")
                         .message("Sistem xətası baş verdi")
+                        .timestamp(LocalDateTime.now())
+                        .build());
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleJsonError(Exception ex) {
+        return ResponseEntity
+                .badRequest()
+                .body(ErrorResponse.builder()
+                        .errorCode("INVALID_JSON")
+                        .message("Request düzgün formatda deyil")
                         .timestamp(LocalDateTime.now())
                         .build());
     }
