@@ -14,6 +14,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -25,12 +27,12 @@ public class TransferServiceImpl implements TransferService {
     private final AccountMapper accountMapper;
 
     @Override
-    @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class
-    )
+    @Transactional(isolation = Isolation.READ_COMMITTED, rollbackFor = Exception.class)
     public TransferResponse transfer(TransferRequest request) {
 
         log.info("Köçürmə başladı: from={}, to={}, amount={}",
                 request.getFromAccountId(), request.getToAccountId(), request.getAmount());
+
         // Eyni hesaba köçürmə
         if (request.getFromAccountId().equals(request.getToAccountId())) {
             throw new BankException("SAME_ACCOUNT_TRANSFER", "Eyni hesaba köçürmə mümkün deyil", 422);
@@ -40,32 +42,55 @@ public class TransferServiceImpl implements TransferService {
         Long firstId = Math.min(request.getFromAccountId(), request.getToAccountId());
         Long secondId = Math.max(request.getFromAccountId(), request.getToAccountId());
 
-        // Pessimistic Lock — hər iki hesab
+        // Pessimistic Lock — hər iki hesab + balance
         var first = accountRepository
                 .findByIdWithLock(firstId)
                 .orElseThrow(() -> new AccountNotFoundException(firstId));
-        log.info("first account: {}",first);
+        log.info("first account: {}", first);
+
         var second = accountRepository
                 .findByIdWithLock(secondId)
                 .orElseThrow(() -> new AccountNotFoundException(secondId));
-        log.info("second account: {}",first);
+        log.info("second account: {}", second); // ← second idi, first deyil!
+
         var fromAccount = request.getFromAccountId().equals(firstId) ? first : second;
         var toAccount = request.getFromAccountId().equals(firstId) ? second : first;
+
+        // Status yoxla
         validateStatus(fromAccount.getStatus(), request.getFromAccountId());
         validateStatus(toAccount.getStatus(), request.getToAccountId());
 
-        int deducted = balanceRepository.updateAvailableBalance(request.getFromAccountId(), request.getAmount().negate());
-        log.info("deducted:{}",deducted);
-        if (deducted == 0) {
-            throw new InsufficientFundsException(fromAccount.getBalance().getAvailableBalance(), request.getAmount());
+        // Balans yoxla
+        BigDecimal available = fromAccount.getBalance().getAvailableBalance();
+        if (available.compareTo(request.getAmount()) < 0) {
+            throw new InsufficientFundsException(available, request.getAmount());
         }
-        balanceRepository.updateAvailableBalance(request.getToAccountId(), request.getAmount());
-        auditService.log(request.getFromAccountId(), "TRANSFER_COMPLETED",
+
+        // Entity üzərindən dəyiş — dirty checking işləyir
+        // @Modifying bypass problemi yoxdur
+        fromAccount.getBalance().setAvailableBalance(
+                available.subtract(request.getAmount())
+        );
+
+        toAccount.getBalance().setAvailableBalance(
+                toAccount.getBalance().getAvailableBalance().add(request.getAmount())
+        );
+
+        // Transaction bitəndə dirty checking avtomatik UPDATE yazır
+        // Əl ilə save() lazım deyil
+
+        // Audit
+        auditService.log(
+                request.getFromAccountId(),
+                "TRANSFER_COMPLETED",
                 String.format("Köçürmə: %s → %s, Məbləğ: %s %s",
-                        request.getFromAccountId(), request.getToAccountId(), request.getAmount(),
-                        fromAccount.getCurrency()));
+                        request.getFromAccountId(), request.getToAccountId(),
+                        request.getAmount(), fromAccount.getCurrency())
+        );
+
         log.info("Köçürmə tamamlandı: from={}, to={}, amount={}",
                 request.getFromAccountId(), request.getToAccountId(), request.getAmount());
+
         return accountMapper.toTransferResponse(request);
     }
 
